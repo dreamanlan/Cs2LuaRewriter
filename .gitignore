@@ -46,22 +46,8 @@ Network Trash Folder
 Temporary Items
 .apdisk
 
-LuaJIT-2.0.4.zip
 obj
 *.sdf
 *.suo
 *.user
 *.opensdf
-Cs2LuaUtility/obj
-Test/Cs2LuaScript/obj
-Test/CustomApi/obj
-Test/TestUnity/Library
-Test/TestUnity/obj
-Test/TestUnity/Temp
-Test/TestUnity/*.csproj
-Test/TestUnity/*.sdf
-Test/TestUnity/*.opensdf
-Test/TestUnity/*.user
-Test/TestUnity/*.suo
-Test/TestUnity/*.sln
-Test/TestUnity/*.userprefs
