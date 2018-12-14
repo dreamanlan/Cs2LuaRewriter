@@ -14,10 +14,6 @@ config(LegalGenericMethodList)
 {
     method("");
 };
-config(LegalExtensionList)
-{
-    type("");
-};
 config(LegalParameterGenericTypeList)
 {
     type("System.Collections.Generic.List_T");
@@ -27,6 +23,10 @@ config(LegalParameterGenericTypeList)
 	type("System.Collections.Generic.IEnumerable_T");
 	type("StorySystem.IStoryValue_T");
 	type("System.Action_T");
+};
+config(LegalExtensionList)
+{
+    type("");
 };
 config(IllegalTypeList)
 {
