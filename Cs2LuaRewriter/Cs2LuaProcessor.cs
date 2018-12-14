@@ -17,8 +17,9 @@ namespace RoslynTool
     {
         Success = 0,
         SyntaxError = 1,
-        Exception = 2,
+        SemanticError = 2,
         FileNotFound = 3,
+        Exception = 4,
     }
     public static class Cs2LuaProcessor
     {
@@ -209,6 +210,8 @@ namespace RoslynTool
                 refs.Add(MetadataReference.CreateFromFile(fullPath, new MetadataReferenceProperties(MetadataImageKind.Assembly, arr)));
             }
 
+            bool haveSemanticError = false;
+            StringBuilder errorBuilder = new StringBuilder();
             StringBuilder sb = new StringBuilder();
             CSharpCompilationOptions compilationOptions = new CSharpCompilationOptions(OutputKind.DynamicallyLinkedLibrary);
             compilationOptions = compilationOptions.WithAssemblyIdentityComparer(DesktopAssemblyIdentityComparer.Default);
@@ -217,24 +220,85 @@ namespace RoslynTool
             compilation = compilation.AddReferences(refs.ToArray());
             compilation = compilation.AddSyntaxTrees(trees.Values);
 
-            SymbolTable.Instance.Init(compilation, rootNs);
-            
-            foreach (var pair in trees) {
-                var filePath = Path.Combine(outputDir, pair.Key);
-                var dir = Path.GetDirectoryName(filePath);
-                if (!Directory.Exists(dir)) {
-                    Directory.CreateDirectory(dir);
+            SymbolTable.Instance.Init(compilation, rootNs, exepath);
+
+            using (StreamWriter sw = new StreamWriter(Path.Combine(logDir, "SemanticError.log"))) {
+                using (StreamWriter sw2 = new StreamWriter(Path.Combine(logDir, "SemanticWarning.log"))) {
+                    foreach (var pair in trees) {
+                        var fileName = Path.Combine(path, pair.Key);
+                        var filePath = Path.Combine(outputDir, pair.Key);
+                        var dir = Path.GetDirectoryName(filePath);
+                        if (!Directory.Exists(dir)) {
+                            Directory.CreateDirectory(dir);
+                        }
+                        SyntaxTree tree = pair.Value;
+                        var model = compilation.GetSemanticModel(tree, true);
+
+                        var diags = model.GetDiagnostics();
+                        bool firstError = true;
+                        bool firstWarning = true;
+                        foreach (var diag in diags) {
+                            if (diag.Severity == DiagnosticSeverity.Error) {
+                                if (firstError) {
+                                    LockWriteLine(sw, "============<<<Semantic Error:{0}>>>============", fileName);
+                                    firstError = false;
+                                }
+                                string msg = diag.ToString();
+                                LockWriteLine(sw, "{0}", msg);
+                                haveSemanticError = true;
+                            } else {
+                                if (firstWarning) {
+                                    LockWriteLine(sw2, "============<<<Semantic Warning:{0}>>>============", fileName);
+                                    firstWarning = false;
+                                }
+                                string msg = diag.ToString();
+                                LockWriteLine(sw2, "{0}", msg);
+                            }
+                        }
+
+                        Logger.Instance.ClearLog();
+                        Cs2LuaRewriter rewriter = new Cs2LuaRewriter(rootNs, model);
+                        var newRoot = rewriter.Visit(tree.GetRoot()) as CSharpSyntaxNode;
+                        string txt = newRoot.ToFullString();
+                        sb.AppendLine(txt);
+                        File.WriteAllText(filePath, txt);
+
+                        if (Logger.Instance.HaveError) {
+                            errorBuilder.AppendLine(Logger.Instance.ErrorLog);
+                        }
+                    }
                 }
-                SyntaxTree tree = pair.Value;
-                Cs2LuaRewriter rewriter = new Cs2LuaRewriter(rootNs);
-                var newRoot = rewriter.Visit(tree.GetRoot()) as CSharpSyntaxNode;
-                string txt = newRoot.ToFullString();
-                sb.AppendLine(txt);
-                File.WriteAllText(filePath, txt);
             }
 
+            File.WriteAllText(Path.Combine(logDir, "Cs2LuaError.log"), errorBuilder.ToString());
+            using (var sw = new StreamWriter(Path.Combine(logDir, "IllegalGenericOrExtensions.txt"))) {
+                sw.WriteLine("IllegalGenericTypes:");
+                foreach (var type in SymbolTable.Instance.IllegalGenericTypes) {
+                    sw.WriteLine("\t{0}", type);
+                }
+                sw.WriteLine("IllegalGenericMethods:");
+                foreach (var method in SymbolTable.Instance.IllegalGenericMethods) {
+                    sw.WriteLine("\t{0}", method);
+                }
+                sw.WriteLine("IllegalParameterGenericTypes:");
+                foreach (var type in SymbolTable.Instance.IllegalParameterGenericTypes) {
+                    sw.WriteLine("\t{0}", type);
+                }
+                sw.WriteLine("IllegalExtensions:");
+                foreach (var type in SymbolTable.Instance.IllegalExtensions) {
+                    sw.WriteLine("\t{0}", type);
+                }
+                sw.WriteLine();
+                sw.WriteLine("AccessMemberOfIllegalGenericTypes:");
+                foreach (var type in SymbolTable.Instance.AccessMemberOfIllegalGenericTypes) {
+                    sw.WriteLine("\t{0}", type);
+                }
+            }
             if (outputResult) {
                 Console.Write(sb.ToString());
+            }
+            if (haveSemanticError) {
+                return ExitCode.SemanticError;
             }
             return ExitCode.Success;
         }
