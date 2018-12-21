@@ -53,7 +53,7 @@ namespace RoslynTool
             InitRecursively(rootNs, nssym);
 
             Dsl.DslFile dslFile = new Dsl.DslFile();
-            if (dslFile.Load(Path.Combine(cfgPath, "config.dsl"), (msg) => { Console.WriteLine(msg); })) {
+            if (dslFile.Load(Path.Combine(cfgPath, "rewriter.dsl"), (msg) => { Console.WriteLine(msg); })) {
                 foreach (var info in dslFile.DslInfos) {
                     var call = info.First.Call;
                     var fid = info.GetId();
