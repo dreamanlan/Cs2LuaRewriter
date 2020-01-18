@@ -345,12 +345,12 @@ namespace RoslynTool
             var srcNamedTypeSym = srcTypeSym as INamedTypeSymbol;
             var targetNamedTypeSym = targetTypeSym as INamedTypeSymbol;
             if (null != srcNamedTypeSym && null != targetNamedTypeSym){
-                if (SymbolTable.CalcFullNameWithTypeParameters(srcNamedTypeSym, true) == "System.Object" && SymbolTable.Instance.IsExternSymbol(srcNamedTypeSym.ContainingType) && targetNamedTypeSym.TypeKind != TypeKind.Delegate && (targetNamedTypeSym.IsGenericType || !SymbolTable.Instance.IsExternSymbol(targetNamedTypeSym))) {
+                if (null != srcNamedTypeSym.ContainingType && SymbolTable.CalcFullNameWithTypeParameters(srcNamedTypeSym, true) == "System.Object" && SymbolTable.Instance.IsExternSymbol(srcNamedTypeSym.ContainingType) && targetNamedTypeSym.TypeKind != TypeKind.Delegate && (targetNamedTypeSym.IsGenericType || !SymbolTable.Instance.IsExternSymbol(targetNamedTypeSym))) {
                     if (!SymbolTable.Instance.IsLegalConvertion(srcNamedTypeSym, targetNamedTypeSym)) {
                         return false;
                     }
                 }
-                else if (SymbolTable.CalcFullNameWithTypeParameters(targetNamedTypeSym, true) == "System.Object" && SymbolTable.Instance.IsExternSymbol(targetNamedTypeSym.ContainingType) && srcNamedTypeSym.TypeKind != TypeKind.Delegate && (srcNamedTypeSym.IsGenericType || !SymbolTable.Instance.IsExternSymbol(srcNamedTypeSym))) {
+                else if (null != targetNamedTypeSym.ContainingType && SymbolTable.CalcFullNameWithTypeParameters(targetNamedTypeSym, true) == "System.Object" && SymbolTable.Instance.IsExternSymbol(targetNamedTypeSym.ContainingType) && srcNamedTypeSym.TypeKind != TypeKind.Delegate && (srcNamedTypeSym.IsGenericType || !SymbolTable.Instance.IsExternSymbol(srcNamedTypeSym))) {
                     if (!SymbolTable.Instance.IsLegalConvertion(srcNamedTypeSym, targetNamedTypeSym)) {
                         return false;
                     }
