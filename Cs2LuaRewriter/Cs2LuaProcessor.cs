@@ -288,6 +288,12 @@ namespace RoslynTool
                 foreach (var type in SymbolTable.Instance.IllegalExtensions) {
                     sw.WriteLine("\t{0}", type);
                 }
+                sw.WriteLine("IllegalConvertions:");
+                foreach (var pair in SymbolTable.Instance.IllegalConvertions) {
+                    foreach (var type in pair.Value) {
+                        sw.WriteLine("\t{0}=>{1}", pair.Key, type);
+                    }
+                }
                 sw.WriteLine();
                 sw.WriteLine("AccessMemberOfIllegalGenericTypes:");
                 foreach (var type in SymbolTable.Instance.AccessMemberOfIllegalGenericTypes) {

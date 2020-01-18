@@ -60,6 +60,7 @@
     <Compile Include="Cs2LuaRewriter\Cs2LuaRewriter.cs" />
     <Compile Include="Cs2LuaRewriter\Cs2LuaProcessor.cs" />
     <Compile Include="Cs2LuaRewriter\Logger.cs" />
+    <Compile Include="Cs2LuaRewriter\StringMatcher.cs" />
     <Compile Include="Cs2LuaRewriter\SymbolTable.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

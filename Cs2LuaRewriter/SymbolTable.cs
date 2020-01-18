@@ -41,6 +41,10 @@ namespace RoslynTool
         {
             get { return m_IllegalExtensions; }
         }
+        internal Dictionary<string, HashSet<string>> IllegalConvertions
+        {
+            get { return m_IllegalConvertions; }
+        }
         internal HashSet<string> AccessMemberOfIllegalGenericTypes
         {
             get { return m_AccessMemberOfIllegalGenericTypes; }
@@ -110,6 +114,26 @@ namespace RoslynTool
                                     var v1 = cd.GetParamId(0);
                                     if (!m_LegalExtensions.Contains(v1)) {
                                         m_LegalExtensions.Add(v1);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    else if (cid == "LegalConvertionList") {
+                        foreach (var comp in info.First.Statements) {
+                            var cd = comp as Dsl.CallData;
+                            if (null != cd) {
+                                var mid = cd.GetId();
+                                if (mid == "convertion") {
+                                    var v1 = cd.GetParamId(0);
+                                    var v2 = cd.GetParamId(1);
+                                    HashSet<string> targets;
+                                    if(!m_LegalConvertions.TryGetValue(v1, out targets)) {
+                                        targets = new HashSet<string>();
+                                        m_LegalConvertions.Add(v1, targets);
+                                    }
+                                    if (!targets.Contains(v2)) {
+                                        targets.Add(v2);
                                     }
                                 }
                             }
@@ -256,6 +280,17 @@ namespace RoslynTool
             }
             return ret;
         }
+        internal bool IsLegalParameterGenericType(INamedTypeSymbol sym)
+        {
+            var name = CalcFullNameWithTypeParameters(sym, true);
+            bool ret = m_LegalParameterGenericTypes.Contains(name);
+            if (!ret) {
+                if (!m_IllegalParameterGenericTypes.Contains(name)) {
+                    m_IllegalParameterGenericTypes.Add(name);
+                }
+            }
+            return ret;
+        }
         internal bool IsLegalExtension(INamedTypeSymbol sym)
         {
             var name = CalcFullNameWithTypeParameters(sym, true);
@@ -267,14 +302,14 @@ namespace RoslynTool
             }
             return ret;
         }
-        internal bool IsLegalParameterGenericType(INamedTypeSymbol sym)
+        internal bool IsLegalConvertion(INamedTypeSymbol srcSym, INamedTypeSymbol targetSym)
         {
-            var name = CalcFullNameWithTypeParameters(sym, true);
-            bool ret = m_LegalParameterGenericTypes.Contains(name);
-            if (!ret) {
-                if (!m_IllegalParameterGenericTypes.Contains(name)) {
-                    m_IllegalParameterGenericTypes.Add(name);
-                }
+            var srcName = CalcFullNameWithTypeParameters(srcSym, true);
+            var targetName = CalcFullNameWithTypeParameters(targetSym, true);
+            bool ret = false;
+            HashSet<string> targets;
+            if(m_LegalConvertions.TryGetValue(srcName, out targets)) {
+                ret = targets.Contains(targetName);
             }
             return ret;
         }
@@ -343,6 +378,8 @@ namespace RoslynTool
         private HashSet<string> m_LegalGenericMethods = new HashSet<string>();
         private HashSet<string> m_LegalParameterGenericTypes = new HashSet<string>();
         private HashSet<string> m_LegalExtensions = new HashSet<string>();
+        private Dictionary<string, HashSet<string>> m_LegalConvertions = new Dictionary<string, HashSet<string>>();
+
         private HashSet<string> m_IllegalTypes = new HashSet<string>();
         private HashSet<string> m_IllegalMethods = new HashSet<string>();
         private HashSet<string> m_IllegalProperties = new HashSet<string>();
@@ -352,6 +389,7 @@ namespace RoslynTool
         private HashSet<string> m_IllegalGenericMethods = new HashSet<string>();
         private HashSet<string> m_IllegalParameterGenericTypes = new HashSet<string>();
         private HashSet<string> m_IllegalExtensions = new HashSet<string>();
+        private Dictionary<string, HashSet<string>> m_IllegalConvertions = new Dictionary<string, HashSet<string>>();
 
         private HashSet<string> m_AccessMemberOfIllegalGenericTypes = new HashSet<string>();
         
