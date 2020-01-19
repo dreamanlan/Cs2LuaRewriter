@@ -173,7 +173,7 @@ namespace RoslynTool
                     }
                 }
                 bool legal = true;
-                if (sym.ContainingType.TypeKind == TypeKind.Delegate || sym.ContainingType.IsGenericType && SymbolTable.Instance.IsLegalGenericType(sym.ContainingType, true)) {
+                if (sym.ContainingType.TypeKind == TypeKind.Delegate || sym.ContainingType.IsGenericType && SymbolTable.Instance.IsLegalGenericType(sym.ContainingType, true) || sym.IsGenericMethod && SymbolTable.Instance.IsLegalGenericMethod(sym)) {
                     //如果是标记为合法的泛型类或委托类型的成员，则不用再进行类型检查
                 } else {
                     foreach (var param in sym.Parameters) {

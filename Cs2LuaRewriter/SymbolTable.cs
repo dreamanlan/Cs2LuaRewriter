@@ -254,6 +254,10 @@ namespace RoslynTool
         {
             var name = CalcFullNameWithTypeParameters(sym, true);
             bool ret = m_LegalGenericTypes.Contains(name);
+            if (!ret && sym.IsGenericType) {                
+                name = CalcFullNameAndTypeArguments(name, sym);
+                ret = m_LegalGenericTypes.Contains(name);
+            }
             if (!ret) {
                 if (isAccessMember) {
                     if (!m_AccessMemberOfIllegalGenericTypes.Contains(name)) {
@@ -284,6 +288,10 @@ namespace RoslynTool
         {
             var name = CalcFullNameWithTypeParameters(sym, true);
             bool ret = m_LegalParameterGenericTypes.Contains(name);
+            if (!ret && sym.IsGenericType) {
+                name = CalcFullNameAndTypeArguments(name, sym);
+                ret = m_LegalParameterGenericTypes.Contains(name);
+            }
             if (!ret) {
                 if (!m_IllegalParameterGenericTypes.Contains(name)) {
                     m_IllegalParameterGenericTypes.Add(name);
@@ -311,12 +319,52 @@ namespace RoslynTool
             if(m_LegalConvertions.TryGetValue(srcName, out targets)) {
                 ret = targets.Contains(targetName);
             }
+            string newTargetName = null;
+            if (!ret && null != targets && targetSym.IsGenericType) {
+                newTargetName = CalcFullNameAndTypeArguments(targetName, targetSym);
+                ret = targets.Contains(newTargetName);
+            }
+            string newSrcName = null;
+            if (!ret && srcSym.IsGenericType) {
+                newSrcName = CalcFullNameAndTypeArguments(srcName, srcSym);
+                if (m_LegalConvertions.TryGetValue(newSrcName, out targets)) {
+                    ret = targets.Contains(targetName);
+                    if(!ret && targetSym.IsGenericType) {
+                        if (null == newTargetName)
+                            newTargetName = CalcFullNameAndTypeArguments(targetName, targetSym);
+                        ret = targets.Contains(newTargetName);
+                    }
+                }
+            }
+            if (!ret) {
+                var src = srcName;
+                if (null != newSrcName) {
+                    src = newSrcName;
+                }
+                var target = targetName;
+                if (null != newTargetName) {
+                    target = newTargetName;
+                }
+                HashSet<string> illegalTargets;
+                if(!m_IllegalConvertions.TryGetValue(src, out illegalTargets)) {
+                    illegalTargets = new HashSet<string>();
+                    m_IllegalConvertions.Add(src, illegalTargets);
+                }
+                if (!illegalTargets.Contains(target)) {
+                    illegalTargets.Add(target);
+                }
+            }
             return ret;
         }
         internal bool IsIllegalType(INamedTypeSymbol sym)
         {
             var name = CalcFullNameWithTypeParameters(sym, true);
-            return m_IllegalTypes.Contains(name);
+            var ret = m_IllegalTypes.Contains(name);
+            if (!ret && sym.IsGenericType) {
+                var str = CalcFullNameAndTypeArguments(name, sym);
+                ret = m_IllegalTypes.Contains(str);
+            }
+            return ret;
         }
         internal bool IsIllegalMethod(IMethodSymbol sym)
         {
@@ -464,6 +512,32 @@ namespace RoslynTool
                 list.Add(param.Name);
             }
             return string.Join("_", list.ToArray());
+        }
+        private static string CalcFullNameAndTypeArguments(string name, INamedTypeSymbol sym)
+        {
+            if (sym.IsGenericType) {
+                StringBuilder sb = new StringBuilder();
+                sb.Append(name);
+                sb.Append('|');
+                string prestr = string.Empty;
+                foreach (var ta in sym.TypeArguments) {
+                    sb.Append(prestr);
+                    if (ta.TypeKind == TypeKind.Delegate) {
+                        sb.AppendFormat("\"{0}\"", CalcFullNameWithTypeParameters(ta, true));
+                    }
+                    else if (ta.TypeKind == TypeKind.TypeParameter) {
+                        sb.Append(ta.Name);
+                    }
+                    else {
+                        sb.Append(CalcFullNameWithTypeParameters(ta, true));
+                    }
+                    prestr = ", ";
+                }
+                return sb.ToString();
+            }
+            else {
+                return name;
+            }
         }
         private static string GetNamespaces(INamespaceSymbol ns)
         {
