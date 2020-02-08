@@ -96,10 +96,12 @@ namespace RoslynTool
             }
             if (isExtern && null != oper) {
                 bool legal = true;
+                SymbolTable.TryRemoveNullable(ref classType);
                 if (null != classType && (classType.TypeKind == TypeKind.Delegate || classType.IsGenericType && SymbolTable.Instance.IsLegalGenericType(classType, true))) {
                     //如果是标记为合法的泛型类或委托类型的成员，则不用再进行类型检查
                 } else {
                     var type = oper.Type as INamedTypeSymbol;
+                    SymbolTable.TryRemoveNullable(ref type);
                     if (null != type && SymbolTable.Instance.IsExternSymbol(type) && type.TypeKind != TypeKind.Delegate) {
                         if (type.IsGenericType) {
                             if (!SymbolTable.Instance.IsLegalParameterGenericType(type)) {
@@ -217,6 +219,7 @@ namespace RoslynTool
             var oper = m_Model.GetOperation(node);
             if (null != oper) {
                 var type = oper.Type as INamedTypeSymbol;
+                SymbolTable.TryRemoveNullable(ref type);
                 if (null != type && SymbolTable.Instance.IsExternSymbol(type)) {
                     if (type.IsGenericType) {
                         if (!SymbolTable.Instance.IsLegalGenericType(type)) {
@@ -240,6 +243,7 @@ namespace RoslynTool
             bool legal = true;
             var oper = m_Model.GetOperation(node) as ITypeOfExpression;
             var type = oper.TypeOperand as INamedTypeSymbol;
+            SymbolTable.TryRemoveNullable(ref type);
             if (null != type && SymbolTable.Instance.IsExternSymbol(type)) {
                 if (type.IsGenericType) {
                     if (!SymbolTable.Instance.IsLegalGenericType(type)) {
@@ -344,6 +348,8 @@ namespace RoslynTool
         {
             var srcNamedTypeSym = srcTypeSym as INamedTypeSymbol;
             var targetNamedTypeSym = targetTypeSym as INamedTypeSymbol;
+            SymbolTable.TryRemoveNullable(ref srcNamedTypeSym);
+            SymbolTable.TryRemoveNullable(ref targetNamedTypeSym);
             if (null != srcNamedTypeSym && null != targetNamedTypeSym){
                 if (null != srcNamedTypeSym.ContainingType && SymbolTable.CalcFullNameWithTypeParameters(srcNamedTypeSym, true) == "System.Object" && SymbolTable.Instance.IsExternSymbol(srcNamedTypeSym.ContainingType) && targetNamedTypeSym.TypeKind != TypeKind.Delegate && (targetNamedTypeSym.IsGenericType || !SymbolTable.Instance.IsExternSymbol(targetNamedTypeSym))) {
                     if (!SymbolTable.Instance.IsLegalConvertion(srcNamedTypeSym, targetNamedTypeSym)) {

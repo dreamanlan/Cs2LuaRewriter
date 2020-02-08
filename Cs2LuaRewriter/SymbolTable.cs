@@ -243,7 +243,14 @@ namespace RoslynTool
         }
         internal bool IsExternSymbol(ITypeSymbol sym)
         {
-            return sym.ContainingAssembly != m_AssemblySymbol;
+            var nsym = sym as INamedTypeSymbol;
+            if (null != nsym) {
+                TryRemoveNullable(ref nsym);
+                return nsym.ContainingAssembly != m_AssemblySymbol;
+            }
+            else {
+                return sym.ContainingAssembly != m_AssemblySymbol;
+            }
         }
 
         internal bool IsLegalGenericType(INamedTypeSymbol sym)
@@ -468,6 +475,21 @@ namespace RoslynTool
                 }
             }
             return false;
+        }
+        internal static bool TryRemoveNullable(ref INamedTypeSymbol sym)
+        {
+            bool ret = false;
+            if (null != sym) {
+                var name = CalcFullNameWithTypeParameters(sym, true);
+                if (name == "System.Nullable_T") {
+                    var nsym = sym.TypeArguments[0] as INamedTypeSymbol;
+                    if (null != nsym) {
+                        sym = nsym;
+                        ret = true;
+                    }
+                }
+            }
+            return ret;
         }
         internal static string CalcFullNameWithTypeParameters(ISymbol type, bool includeSelfName)
         {
