@@ -11,6 +11,12 @@ using Microsoft.CodeAnalysis.CSharp.Symbols;
 
 namespace RoslynTool
 {
+    internal class ArgDefaultValueInfo
+    {
+        internal object Value;
+        internal object OperOrSym;
+        internal ExpressionSyntax Expression;
+    }
     internal class Cs2LuaRewriter : CSharpSyntaxRewriter
     {
         public override SyntaxNode VisitIdentifierName(IdentifierNameSyntax node)
@@ -166,6 +172,10 @@ namespace RoslynTool
 
             var newNode = base.VisitInvocationExpression(node);
             if (null != sym && SymbolTable.Instance.IsExternSymbol(sym)) {
+                var ckey = SymbolTable.CalcFullNameWithTypeParameters(sym.ContainingType, true);
+                var oper = null != node ? m_Model.GetOperation(node) as IInvocationExpression : null;
+                var realType = null != oper && null != oper.Instance ? oper.Instance.Type : null;
+
                 if (sym.IsExtensionMethod && !SymbolTable.Instance.IsLegalExtension(sym.ContainingType)) {
                     //不支持的语法
                     newNode = ReportAndAttachError(newNode, "[Cs2LuaRewriter] Unsupported extension method !");
@@ -175,18 +185,43 @@ namespace RoslynTool
                     }
                 }
                 bool legal = true;
-                if (sym.ContainingType.TypeKind == TypeKind.Delegate || sym.ContainingType.IsGenericType && SymbolTable.Instance.IsLegalGenericType(sym.ContainingType, true) || sym.IsGenericMethod && SymbolTable.Instance.IsLegalGenericMethod(sym)) {
+                if (sym.ContainingType.TypeKind == TypeKind.Delegate ||
+                    (null == realType || realType == sym.ContainingType) && sym.ContainingType.IsGenericType && SymbolTable.Instance.IsLegalGenericType(sym.ContainingType, true) || 
+                    sym.IsGenericMethod && SymbolTable.Instance.IsLegalGenericMethod(sym)) {
                     //如果是标记为合法的泛型类或委托类型的成员，则不用再进行类型检查
                 } else {
+                    List<ExpressionSyntax> args;
+                    List<ArgDefaultValueInfo> defArgs;
+                    List<IConversionExpression> argConversions;
+                    ExtractInvocationInfo(sym, node.ArgumentList, out args, out defArgs, out argConversions);
+                    int ix = 0;
                     foreach (var param in sym.Parameters) {
-                        var type = param.Type as INamedTypeSymbol;
-                        if (null != type && type.TypeKind != TypeKind.Delegate) {
-                            if (type.IsGenericType) {
-                                if (!SymbolTable.Instance.IsLegalParameterGenericType(type)) {
+                        IOperation argOper = null;
+                        if (ix < args.Count)
+                            argOper = null != args[ix] ? m_Model.GetOperation(args[ix]) : null;
+                        else if (ix < args.Count + defArgs.Count)
+                            argOper = defArgs[ix - args.Count].OperOrSym as IOperation;
+                        IConversionExpression argConv = null;
+                        if (ix < argConversions.Count)
+                            argConv = argConversions[ix];
+                        ++ix;
+                        INamedTypeSymbol argType = null;
+                        if (null != argOper && (null == argConv || !argConv.UsesOperatorMethod)) {
+                            argType = argOper.Type as INamedTypeSymbol;
+                        }
+                        var paramType = param.Type as INamedTypeSymbol;
+                        if (null != paramType && paramType.TypeKind != TypeKind.Delegate) {
+                            bool isContainerIntf = paramType.Name == "IEnumerable" || paramType.Name == "ICollection" || paramType.Name == "IDictionary" || paramType.Name == "IList";
+                            if (null != realType && !SymbolTable.Instance.IsExternSymbol(realType) && isContainerIntf &&
+                                null != argType && (argType.IsGenericType || !SymbolTable.Instance.IsExternSymbol(argType))) {
+                                legal = false;
+                            }
+                            else if (paramType.IsGenericType) {
+                                if (!SymbolTable.Instance.IsLegalParameterGenericType(paramType)) {
                                     legal = false;
                                 }
                             } else {
-                                if (SymbolTable.Instance.IsIllegalType(type)) {
+                                if (SymbolTable.Instance.IsIllegalType(paramType)) {
                                     legal = false;
                                 }
                             }
@@ -208,7 +243,7 @@ namespace RoslynTool
                     }
                 }
                 if (!legal) {
-                    newNode = ReportAndAttachError(newNode, string.Format("[Cs2LuaRewriter] Unsupported extern type from invocation's return or out param !"));
+                    newNode = ReportAndAttachError(newNode, string.Format("[Cs2LuaRewriter] Unsupported extern type from invocation's return or params !"));
                 }
             }
             return newNode;
@@ -379,6 +414,92 @@ namespace RoslynTool
         {
             Logger.Instance.Log(node, errInfo);
             return node.WithLeadingTrivia(SyntaxFactory.Comment(string.Format("/* {0} */", errInfo)));
+        }
+        private void ExtractInvocationInfo(IMethodSymbol sym, ArgumentListSyntax argList, out List<ExpressionSyntax> args, out List<ArgDefaultValueInfo> defArgs, out List<IConversionExpression> argConversions)
+        {
+            args = new List<ExpressionSyntax>();
+            defArgs = new List<ArgDefaultValueInfo>();
+            argConversions = new List<IConversionExpression>();
+
+            var moper = m_Model.GetOperation(argList) as IInvocationExpression;
+            var argExps = argList.Arguments;
+
+            Dictionary<string, ExpressionSyntax> namedArgs = new Dictionary<string, ExpressionSyntax>();
+            int ct = 0;
+            for (int i = 0; i < argExps.Count; ++i) {
+                var arg = argExps[i];
+                var argOper = m_Model.GetOperation(arg.Expression);
+                if (null != arg.NameColon) {
+                    namedArgs.Add(arg.NameColon.Name.Identifier.Text, arg.Expression);
+                    continue;
+                }
+                IConversionExpression lastConv = null;
+                if (ct < sym.Parameters.Length) {
+                    var param = sym.Parameters[ct];
+                    if (null != moper) {
+                        var iarg = moper.GetArgumentMatchingParameter(param);
+                        if (null != iarg) {
+                            lastConv = iarg.Value as IConversionExpression;
+                        }
+                    }
+                    if (param.RefKind == RefKind.Ref) {
+                        args.Add(arg.Expression);
+                    }
+                    else if (param.RefKind == RefKind.Out) {
+                        //方法的out参数，为与脚本引擎的机制一致，在调用时传入__cs2dsl_out，这里用null标记一下，在实际输出参数时再变为__cs2dsl_out
+                        args.Add(null);
+                    }
+                    else if (param.IsParams) {
+                        args.Add(arg.Expression);
+                    }
+                    else {
+                        args.Add(arg.Expression);
+                    }
+                    ++ct;
+                }
+                else {
+                    args.Add(arg.Expression);
+                }
+                argConversions.Add(lastConv);
+            }
+            for (int i = ct; i < sym.Parameters.Length; ++i) {
+                var param = sym.Parameters[i];
+                if (param.HasExplicitDefaultValue) {
+                    IConversionExpression lastConv = null;
+                    if (null != moper) {
+                        var iarg = moper.GetArgumentMatchingParameter(param);
+                        if (null != iarg) {
+                            lastConv = iarg.Value as IConversionExpression;
+                        }
+                    }
+                    argConversions.Add(lastConv);
+                    ExpressionSyntax expval;
+                    if (namedArgs.TryGetValue(param.Name, out expval)) {
+                        var argOper = m_Model.GetOperation(expval);
+                        defArgs.Add(new ArgDefaultValueInfo { Expression = expval });
+                    }
+                    else {
+                        var decl = param.DeclaringSyntaxReferences;
+                        bool handled = false;
+                        if (decl.Length >= 1) {
+                            var node = param.DeclaringSyntaxReferences[0].GetSyntax() as ParameterSyntax;
+                            if (null != node) {
+                                var exp = node.Default.Value;
+                                var tree = node.SyntaxTree;
+                                var newModel = SymbolTable.Instance.Compilation.GetSemanticModel(tree, true);
+                                if (null != newModel) {
+                                    var oper = newModel.GetOperation(exp);
+                                    defArgs.Add(new ArgDefaultValueInfo { Value = param.ExplicitDefaultValue, OperOrSym = oper });
+                                    handled = true;
+                                }
+                            }
+                        }
+                        if (!handled) {
+                            defArgs.Add(new ArgDefaultValueInfo { Value = param.ExplicitDefaultValue, OperOrSym = null });
+                        }
+                    }
+                }
+            }
         }
 
         public Cs2LuaRewriter(string rootNs, SemanticModel model)
